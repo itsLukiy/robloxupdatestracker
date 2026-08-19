@@ -1,62 +1,71 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const express = require('express');
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-
 let lastLiveVersion = '';
+
+// Servidor web FALSO para Render (tiene que ir ANTES)
+const app = express();
+const PORT = process.env.PORT || 10000;
+app.get('/', (req, res) => res.send('Bot prendido 24/7 - Roblox Tracker'));
+app.listen(PORT, () => console.log(`Falso web server en puerto ${PORT}`));
 
 client.once('ready', () => {
     console.log(`Bot conectado como ${client.user.tag}`);
     checkLiveVersion();
-    setInterval(checkLiveVersion, 30000); // cada 30s consulta a Roblox
+    setInterval(checkLiveVersion, 30000);
 });
 
 async function checkLiveVersion() {
     try {
         const res = await fetch('https://clientsettings.roblox.com/v2/client-version/WindowsPlayer');
         const data = await res.json();
-
-        const currentVersion = data.clientVersionUpload; // ej: version-6a1c4e3e7b8a4d2c...
+        const currentVersion = data.clientVersionUpload;
         console.log(`[REVISIÓN LIVE] ${currentVersion}`);
-
         if (!currentVersion) return;
 
-        const channel = await client.channels.fetch(process.env.CHANNEL_ID);
-        if (!channel) return;
+        const channelId = process.env.CHANNEL_ID?.trim();
+        const channel = await client.channels.fetch(channelId).catch(() => null);
+        if (!channel) {
+            console.log('No pude encontrar el canal con ID:', channelId);
+            return;
+        }
 
         if (lastLiveVersion === '') {
             const initEmbed = new EmbedBuilder()
-               .setTitle('🟢 Rastreador LIVE Iniciado')
-               .setDescription('Vigilando la versión oficial de Roblox directo de los servidores.')
-               .addFields({ name: 'Versión Live Actual', value: `\`${currentVersion}\`` })
-               .setColor('#00AAFF')
-               .setTimestamp();
+              .setTitle('🟢 Rastreador LIVE Iniciado')
+              .setDescription('Vigilando la versión oficial de Roblox directo de los servidores.')
+              .addFields({ name: 'Versión Live Actual', value: `\`${currentVersion}\`` })
+              .setColor(0x00AAFF)
+              .setTimestamp();
             await channel.send({ embeds: [initEmbed] });
         } else if (currentVersion!== lastLiveVersion) {
             const updateEmbed = new EmbedBuilder()
-               .setTitle('🚀 ¡Nueva Versión de Roblox LIVE!')
-               .setDescription('Roblox acaba de publicar una nueva build oficial.')
-               .addFields(
+              .setTitle('🚀 ¡Nueva Versión de Roblox LIVE!')
+              .setDescription('Roblox acaba de publicar una nueva build oficial.')
+              .addFields(
                     { name: 'Nueva Versión', value: `\`${currentVersion}\`` },
                     { name: 'Versión Anterior', value: `\`${lastLiveVersion}\`` }
                 )
-               .setColor('#00FF66')
-               .setTimestamp();
+              .setColor(0x00FF66)
+              .setTimestamp();
             await channel.send({ embeds: [updateEmbed] });
         }
-
         lastLiveVersion = currentVersion;
-
     } catch (e) {
         console.error('Error al consultar API de Roblox:', e.message);
     }
 }
 
-client.login(process.env.DISCORD_TOKEN);
+// LOGIN CON ERROR VISIBLE
+const token = process.env.DISCORD_TOKEN?.trim();
+if (!token) {
+    console.error('ERROR: DISCORD_TOKEN no existe en Render Environment');
+} else {
+    client.login(token)
+       .then(() => console.log('Login enviado a Discord...'))
+       .catch(err => console.error('ERROR LOGIN DISCORD:', err.message, err.code));
+}
 
-const express = require('express');
-const app = express();
-const PORT = process.env.PORT || 3000;
-
-app.get('/', (req, res) => res.send('Bot prendido 24/7'));
-app.listen(PORT, () => console.log(`Falso web server en puerto ${PORT}`));
+client.on('error', console.error);
